@@ -271,18 +271,15 @@ def main():
     
     # ==================== PBA Search Loop ====================
     results = []
-    
+
     for generation in range(args.n_generations):
         print(f"\n{'#'*60}")
         print(f"# GENERATION {generation+1}/{args.n_generations}")
         print(f"{'#'*60}")
         
-        # Check if this is the last generation
-        is_last_generation = (generation == args.n_generations - 1)
-        
         # Evaluate all policies in population
         fitness_scores = []
-        trainers = []
+        trainers = []  # 🔴 항상 trainer를 저장
         
         for policy_idx, policy in enumerate(searcher.get_population()):
             val_acc, val_loss, trainer = evaluate_policy(
@@ -301,9 +298,7 @@ def main():
             )
             
             fitness_scores.append(val_acc)
-            
-            if is_last_generation:
-                trainers.append((policy_idx, trainer, policy))
+            trainers.append((policy_idx, trainer, policy))  # 🔴 매 세대마다 저장
             
             # Save result
             policy_dict = policy.to_dict()
@@ -329,40 +324,35 @@ def main():
         print(f"  Std Val Acc:   {np.std(fitness_scores):.2f}%")
         print(f"{'='*60}")
         
-        # Save top 3 models from last generation
-        if is_last_generation:
-            print("\nSaving top 3 models from final generation...")
-            # Sort by validation accuracy
-            sorted_trainers = sorted(trainers, key=lambda x: x[1].best_val_acc, reverse=True)
+        # 🔴 매 세대마다 top 3 모델 저장
+        print(f"\nSaving top 3 models from generation {generation+1}...")
+        sorted_trainers = sorted(trainers, key=lambda x: x[1].best_val_acc, reverse=True)
+        
+        for rank, (policy_idx, trainer, policy) in enumerate(sorted_trainers[:3]):
+            policy_dict = policy.to_dict()
+            model_name = (f"gen{generation+1}_"
+                        f"top{rank+1}_"
+                        f"acc{trainer.best_val_acc:.2f}_"
+                        f"{policy_dict['op1']['method']}_"
+                        f"{policy_dict['op2']['method']}")
             
-            for rank, (policy_idx, trainer, policy) in enumerate(sorted_trainers[:3]):
-                policy_dict = policy.to_dict()
-                model_name = (f"top{rank+1}_"
-                             f"acc{trainer.best_val_acc:.2f}_"
-                             f"{policy_dict['op1']['method']}_"
-                             f"{policy_dict['op2']['method']}")
-                
-                save_path = trainer.save_checkpoint(
-                    checkpoint_dir=CHECKPOINT_DIR,
-                    model_name=model_name,
-                    save_format='simple'
-                )
-                print(f"  Rank {rank+1}: {model_name} (acc={trainer.best_val_acc:.2f}%)")
+            save_path = trainer.save_checkpoint(
+                checkpoint_dir=CHECKPOINT_DIR,
+                model_name=model_name,
+                save_format='simple'
+            )
+            print(f"  Rank {rank+1}: {model_name} (acc={trainer.best_val_acc:.2f}%)")
         
         # Evolve population (except for last generation)
-        if not is_last_generation:
+        if generation < args.n_generations - 1:
             searcher.evolve(fitness_scores)
         
-        # ========== Save progress every generation ==========
-        # Save intermediate CSV results
+        # Save progress every generation
         save_results_csv(results, LOG_DIR / args.results_file)
-        
-        # Save intermediate search history (JSON)
         history_path = LOG_DIR / 'pba_search_history.json'
         searcher.save_history(history_path)
         
-        print(f"Progress saved: Generation {generation+1}/{args.n_generations}")
-        # ====================================================
+        print(f"Progress saved: Generation {generation+1}/{args.n_generations}")    # ====================================================
     
     # ==================== Final Results ====================
     print(f"\n{'#'*60}")

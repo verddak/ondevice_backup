@@ -1,3 +1,4 @@
 /checkpoint*/
-/data/
+*.csv
 /logs/
+*.png
